@@ -152,10 +152,14 @@ class PasswordResetConfirmView(APIView):
 
     def post(self, request, uidb64, token):
         new_password = request.data.get('new_password')
+        confirm_new_password = request.data.get('confirm_new_password')
 
-        if not new_password:
+        if not new_password or not confirm_new_password:
             return Response({'error' : 'New password is required'}, status=status.HTTP_400_BAD_REQUEST)
         
+        if new_password != confirm_new_password:
+            return Response({'error' : 'Passwords do not match'}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             uid = force_str(urlsafe_base64_decode(uidb64))
             user = User.objects.get(pk=uid)
