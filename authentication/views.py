@@ -183,10 +183,11 @@ class GoogleLoginView(APIView):
 
     def post(self, request):
         code = request.data.get('code')
-        code = unquote(code)
 
         if not code:
             return Response({'error' : 'Authorisation code is required'} , status=status.HTTP_400_BAD_REQUEST)
+        
+        code = unquote(code)
         
         token_url = "https://oauth2.googleapis.com/token"
         token_data = {
@@ -198,7 +199,7 @@ class GoogleLoginView(APIView):
         }
 
         try:
-            response = requests.post(token_url, data=token_data)
+            response = requests.post(token_url, data=token_data, timeout=10)
             response.raise_for_status()
             google_tokens = response.json()
         except requests.exceptions.RequestException as e:
@@ -209,7 +210,7 @@ class GoogleLoginView(APIView):
         user_info_url = 'https://www.googleapis.com/oauth2/v2/userinfo'
 
         try:
-            user_response = requests.get(user_info_url, params={'access_token' : access_token})
+            user_response = requests.get(user_info_url, params={'access_token' : access_token}, timeout=10)
             user_response.raise_for_status()
             user_info = user_response.json()
         except requests.exceptions.RequestException:
