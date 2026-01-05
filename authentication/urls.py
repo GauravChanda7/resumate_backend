@@ -7,6 +7,7 @@ from .views import (
     PasswordResetRequestView,
     PasswordResetConfirmView,
     RefreshTokenView,
+    GoogleLoginView
 )
 
 app_name = 'authentication'
@@ -19,4 +20,6 @@ urlpatterns = [
     path('change_password/', ChangePasswordView.as_view(), name='change_password'),
     path('password/reset/', PasswordResetRequestView.as_view(), name='password_reset_request'),
     path('password/confirm/<uidb64>/<token>/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
+
+    path('google/', GoogleLoginView.as_view(), name='google_login'),
 ]

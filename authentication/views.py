@@ -11,6 +11,8 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.utils.encoding import force_bytes, force_str
 from django.core.mail import send_mail
 from django.conf import settings
+import requests
+from urllib.parse import unquote
 
 # Create your views here.
 class RegisterView(APIView):
@@ -54,9 +56,9 @@ class LoginView(APIView):
             return Response({
                 'access_token' : access_token,
                 'refresh_token' : refresh_token, 
-                'user_id' : user.id}, 
-                status=status.HTTP_200_OK
-                )
+                'user_id' : user.id,
+                'username' : user.username,
+            }, status=status.HTTP_200_OK)
         else:
             return Response({'error' : 'Invalid Credentials'}, status=status.HTTP_401_UNAUTHORIZED)
         
@@ -94,7 +96,8 @@ class LogoutView(APIView):
     
     def post(self, request):
         return Response({'message' : 'User logged out successfully'})
-    
+
+
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -117,7 +120,7 @@ class ChangePasswordView(APIView):
         user.set_password(new_password)
         user.save()
         return Response({'message' : 'Password updated successfully'}, status=status.HTTP_200_OK)
-        
+     
     
 class PasswordResetRequestView(APIView):
     permission_classes = [AllowAny]
@@ -173,4 +176,74 @@ class PasswordResetConfirmView(APIView):
         user.save()
 
         return Response({'message' : 'Password has been reset successfully'}, status=status.HTTP_200_OK)
+        
+
+class GoogleLoginView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        code = request.data.get('code')
+        code = unquote(code)
+
+        if not code:
+            return Response({'error' : 'Authorisation code is required'} , status=status.HTTP_400_BAD_REQUEST)
+        
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            'code' : code,
+            'client_id' : settings.GOOGLE_CLIENT_ID,
+            'client_secret' : settings.GOOGLE_CLIENT_SECRET,
+            'redirect_uri' : settings.GOOGLE_REDIRECT_URI,
+            'grant_type' : 'authorization_code',
+        }
+
+        try:
+            response = requests.post(token_url, data=token_data)
+            response.raise_for_status()
+            google_tokens = response.json()
+        except requests.exceptions.RequestException as e:
+            return Response({'error' : 'Failed to exchange code with Google'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        access_token = google_tokens.get('access_token')
+
+        user_info_url = 'https://www.googleapis.com/oauth2/v2/userinfo'
+
+        try:
+            user_response = requests.get(user_info_url, params={'access_token' : access_token})
+            user_response.raise_for_status()
+            user_info = user_response.json()
+        except requests.exceptions.RequestException:
+            return Response({'error' : 'Failed to exchange user info from Google'}, status=status.HTTP_400_BAD_REQUEST)
+
+        email = user_info.get('email')
+        
+        if not email:
+            return Response({'error' : 'Google account has no email'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = User.objects.filter(email=email).first()
+
+        if user:
+            pass
+        else:
+            base_username = email.split('@')[0]
+            username = base_username
+            counter = 1
+            while User.objects.filter(username=username).exists():
+                username = f"{base_username}{counter}"
+                counter += 1
+
+            user = User.objects.create_user(username=username, email=email, password=None)
+
+        access_token = generate_access_token(user)
+        refresh_token = generate_refresh_token(user)
+
+        return Response({
+            'access_token' : access_token,
+            'refresh_token' : refresh_token,
+            'user_id' : user.id,
+            'username' : user.username,
+        }, status=status.HTTP_200_OK)
+    
+
+
         
